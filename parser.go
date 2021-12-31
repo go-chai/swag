@@ -1234,45 +1234,43 @@ func defineTypeOfExample(schemaType, arrayType, exampleValue string) (interface{
 
 // GetAllGoFileInfoAndParseTypes gets all Go source files information for given searchDir and parses the types from them.
 func (parser *Parser) GetAllGoFileInfoAndParseTypes(searchDir string) error {
-	return filepath.Walk(searchDir, func(path string, f os.FileInfo, _ error) error {
-		if err := parser.Skip(path, f); err != nil {
-			return err
-		} else if f.IsDir() {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(searchDir, path)
+	return filepath.Walk(searchDir, func(path string, f os.FileInfo, e error) error {
+		astFile, err := parser.getGoFileInfo(searchDir, searchDir, path, f, e)
 		if err != nil {
 			return err
 		}
 
-		packageDir := filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(searchDir, relPath))))
-
-		astFile, err := parser.parseFile(packageDir, path, nil)
-		if err != nil {
-			return err
-		}
-		parser.packages.parseTypesFromFile(astFile, packageDir, make(map[*TypeSpecDef]*Schema))
+		parser.packages.parseTypesFromFile(astFile, searchDir, make(map[*TypeSpecDef]*Schema))
 
 		return nil
 	})
 }
 
+func (parser *Parser) getGoFileInfo(packageDir, searchDir string, path string, f os.FileInfo, _ error) (*ast.File, error) {
+	if err := parser.Skip(path, f); err != nil {
+		return nil, err
+	} else if f.IsDir() {
+		return nil, nil
+	}
+
+	relPath, err := filepath.Rel(searchDir, path)
+	if err != nil {
+		return nil, err
+	}
+
+	astFile, err := parser.parseFile(filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(packageDir, relPath)))), path, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return astFile, nil
+}
+
 // GetAllGoFileInfo gets all Go source files information for given searchDir.
 func (parser *Parser) getAllGoFileInfo(packageDir, searchDir string) error {
-	return filepath.Walk(searchDir, func(path string, f os.FileInfo, _ error) error {
-		if err := parser.Skip(path, f); err != nil {
-			return err
-		} else if f.IsDir() {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(searchDir, path)
-		if err != nil {
-			return err
-		}
-
-		_, err = parser.parseFile(filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(packageDir, relPath)))), path, nil)
+	return filepath.Walk(searchDir, func(path string, f os.FileInfo, e error) error {
+		_, err := parser.getGoFileInfo(packageDir, searchDir, path, f, e)
 
 		if err != nil {
 			return err
