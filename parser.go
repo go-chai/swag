@@ -2,6 +2,7 @@ package swag
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -18,8 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/KyleBanks/depth"
 	"github.com/go-openapi/spec"
@@ -1233,7 +1232,7 @@ func defineTypeOfExample(schemaType, arrayType, exampleValue string) (interface{
 	return nil, fmt.Errorf("%s is unsupported type in example value %s", schemaType, exampleValue)
 }
 
-// GetAllGoFileInfo gets all Go source files information for given searchDir.
+// GetAllGoFileInfoAndParseTypes gets all Go source files information for given searchDir and parses the types from them.
 func (parser *Parser) GetAllGoFileInfoAndParseTypes(searchDir string) error {
 	return filepath.Walk(searchDir, func(path string, f os.FileInfo, _ error) error {
 		if err := parser.Skip(path, f); err != nil {
@@ -1247,34 +1246,16 @@ func (parser *Parser) GetAllGoFileInfoAndParseTypes(searchDir string) error {
 			return err
 		}
 
-		err = parser.parseFileAndTypes(filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(searchDir, relPath)))), path, nil)
+		packageDir := filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(searchDir, relPath))))
+
+		astFile, err := parser.parseFile(packageDir, path, nil)
 		if err != nil {
 			return err
 		}
+		parser.packages.parseTypesFromFile(astFile, packageDir, make(map[*TypeSpecDef]*Schema))
 
 		return nil
 	})
-}
-
-func (parser *Parser) parseFileAndTypes(packageDir, path string, src interface{}) error {
-	if strings.HasSuffix(strings.ToLower(path), "_test.go") || filepath.Ext(path) != ".go" {
-		return nil
-	}
-
-	// positions are relative to FileSet
-	astFile, err := goparser.ParseFile(token.NewFileSet(), path, src, goparser.ParseComments)
-	if err != nil {
-		return fmt.Errorf("ParseFile error:%+v", err)
-	}
-
-	err = parser.packages.CollectAstFile(packageDir, path, astFile)
-	if err != nil {
-		return err
-	}
-
-	parser.packages.parseTypesFromFile(astFile, packageDir, make(map[*TypeSpecDef]*Schema))
-
-	return nil
 }
 
 // GetAllGoFileInfo gets all Go source files information for given searchDir.
@@ -1291,7 +1272,13 @@ func (parser *Parser) getAllGoFileInfo(packageDir, searchDir string) error {
 			return err
 		}
 
-		return parser.parseFile(filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(packageDir, relPath)))), path, nil)
+		_, err = parser.parseFile(filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(packageDir, relPath)))), path, nil)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
 	})
 }
 
@@ -1317,7 +1304,7 @@ func (parser *Parser) getAllGoFileInfoFromDeps(pkg *depth.Pkg) error {
 		}
 
 		path := filepath.Join(srcDir, f.Name())
-		if err := parser.parseFile(pkg.Name, path, nil); err != nil {
+		if _, err := parser.parseFile(pkg.Name, path, nil); err != nil {
 			return err
 		}
 	}
@@ -1331,23 +1318,23 @@ func (parser *Parser) getAllGoFileInfoFromDeps(pkg *depth.Pkg) error {
 	return nil
 }
 
-func (parser *Parser) parseFile(packageDir, path string, src interface{}) error {
+func (parser *Parser) parseFile(packageDir, path string, src interface{}) (*ast.File, error) {
 	if strings.HasSuffix(strings.ToLower(path), "_test.go") || filepath.Ext(path) != ".go" {
-		return nil
+		return nil, nil
 	}
 
 	// positions are relative to FileSet
 	astFile, err := goparser.ParseFile(token.NewFileSet(), path, src, goparser.ParseComments)
 	if err != nil {
-		return fmt.Errorf("ParseFile error:%+v", err)
+		return nil, fmt.Errorf("ParseFile error:%+v", err)
 	}
 
 	err = parser.packages.CollectAstFile(packageDir, path, astFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return astFile, nil
 }
 
 func (parser *Parser) checkOperationIDUniqueness() error {

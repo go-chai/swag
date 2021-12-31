@@ -92,6 +92,7 @@ type Config struct {
 	Strict bool
 }
 
+// Generate outputs a swagger spec
 func (g *Gen) Generate(swagger *spec.Swagger, config *GenConfig) error {
 	if config.InstanceName == "" {
 		config.InstanceName = swag.Name
@@ -157,10 +158,6 @@ func (g *Gen) Generate(swagger *spec.Swagger, config *GenConfig) error {
 
 // Build builds swagger json file  for given searchDir and mainAPIFile. Returns json
 func (g *Gen) Build(config *Config) error {
-	if config.InstanceName == "" {
-		config.InstanceName = swag.Name
-	}
-
 	searchDirs := strings.Split(config.SearchDir, ",")
 	for _, searchDir := range searchDirs {
 		if _, err := os.Stat(searchDir); os.IsNotExist(err) {
