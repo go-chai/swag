@@ -48,7 +48,15 @@ type GenConfig struct {
 
 // Config presents Gen configurations.
 type Config struct {
-	*GenConfig
+	// OutputDir represents the output directory for all the generated files
+	OutputDir string
+
+	// InstanceName is used to get distinct names for different swagger documents in the
+	// same project. The default value is "swagger".
+	InstanceName string
+
+	// GeneratedTime whether swag should generate the timestamp at the top of docs.go
+	GeneratedTime bool
 
 	// SearchDir the swag would be parse,comma separated if multiple
 	SearchDir string
@@ -174,7 +182,11 @@ func (g *Gen) Build(config *Config) error {
 		return err
 	}
 
-	return g.Generate(p.GetSwagger(), config.GenConfig)
+	return g.Generate(p.GetSwagger(), &GenConfig{
+		OutputDir:     config.OutputDir,
+		InstanceName:  config.InstanceName,
+		GeneratedTime: config.GeneratedTime,
+	})
 }
 
 func (g *Gen) writeFile(b []byte, file string) error {
