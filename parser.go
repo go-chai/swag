@@ -1240,6 +1240,10 @@ func (parser *Parser) GetAllGoFileInfoAndParseTypes(searchDir string) error {
 			return err
 		}
 
+		if astFile == nil {
+			return nil
+		}
+
 		parser.packages.parseTypesFromFile(astFile, searchDir, make(map[*TypeSpecDef]*Schema))
 
 		return nil
