@@ -2,7 +2,6 @@ package swag
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -19,6 +18,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/KyleBanks/depth"
 	"github.com/go-openapi/spec"
@@ -66,8 +67,8 @@ type Parser struct {
 	// swagger represents the root document object for the API specification
 	swagger *spec.Swagger
 
-	// packages store entities of APIs, definitions, file, package path etc.  and their relations
-	packages *PackagesDefinitions
+	// Packages store entities of APIs, definitions, file, package path etc.  and their relations
+	Packages *PackagesDefinitions
 
 	// parsedSchemas store schemas which have been parsed from ast.TypeSpec
 	parsedSchemas map[*TypeSpecDef]*Schema
@@ -93,7 +94,7 @@ type Parser struct {
 	// ParseDependencies whether swag should be parse outside dependency folder
 	ParseDependency bool
 
-	// ParseInternal whether swag should parse internal packages
+	// ParseInternal whether swag should parse internal Packages
 	ParseInternal bool
 
 	// Strict whether swag should error or warn when it detects cases which are most likely user errors
@@ -161,7 +162,7 @@ func New(options ...func(*Parser)) *Parser {
 				SecurityDefinitions: make(map[string]*spec.SecurityScheme),
 			},
 		},
-		packages:           NewPackagesDefinitions(),
+		Packages:           NewPackagesDefinitions(),
 		debug:              log.New(os.Stdout, "", log.LstdFlags),
 		parsedSchemas:      make(map[*TypeSpecDef]*Schema),
 		outputSchemas:      make(map[*TypeSpecDef]*Schema),
@@ -280,12 +281,12 @@ func (parser *Parser) ParseAPIMultiSearchDir(searchDirs []string, mainAPIFile st
 		return err
 	}
 
-	parser.parsedSchemas, err = parser.packages.ParseTypes()
+	parser.parsedSchemas, err = parser.Packages.ParseTypes()
 	if err != nil {
 		return err
 	}
 
-	err = parser.packages.RangeFiles(parser.ParseRouterAPIInfo)
+	err = parser.Packages.RangeFiles(parser.ParseRouterAPIInfo)
 	if err != nil {
 		return err
 	}
@@ -773,9 +774,9 @@ func (parser *Parser) getTypeSchema(typeName string, file *ast.File, ref bool) (
 		return PrimitiveSchema(schemaType), nil
 	}
 
-	typeSpecDef := parser.packages.FindTypeSpec(typeName, file, parser.ParseDependency)
+	typeSpecDef := parser.Packages.FindTypeSpec(typeName, file, parser.ParseDependency)
 	if typeSpecDef == nil {
-		return nil, fmt.Errorf("cannot find type definition: %s", typeName)
+		return nil, errors.Errorf("cannot find type definition: %s", typeName)
 	}
 
 	schema, ok := parser.parsedSchemas[typeSpecDef]
@@ -1207,7 +1208,7 @@ func defineTypeOfExample(schemaType, arrayType, exampleValue string) (interface{
 		return result, nil
 	case OBJECT:
 		if arrayType == "" {
-			return nil, fmt.Errorf("%s is unsupported type in example value `%s`", schemaType, exampleValue)
+			return nil, errors.Errorf("%s is unsupported type in example value `%s`", schemaType, exampleValue)
 		}
 
 		values := strings.Split(exampleValue, ",")
@@ -1230,6 +1231,50 @@ func defineTypeOfExample(schemaType, arrayType, exampleValue string) (interface{
 	}
 
 	return nil, fmt.Errorf("%s is unsupported type in example value %s", schemaType, exampleValue)
+}
+
+// GetAllGoFileInfo gets all Go source files information for given searchDir.
+func (parser *Parser) GetAllGoFileInfoAndParseTypes(searchDir string) error {
+	return filepath.Walk(searchDir, func(path string, f os.FileInfo, _ error) error {
+		if err := parser.Skip(path, f); err != nil {
+			return err
+		} else if f.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(searchDir, path)
+		if err != nil {
+			return err
+		}
+
+		err = parser.parseFileAndTypes(filepath.ToSlash(filepath.Dir(filepath.Clean(filepath.Join(searchDir, relPath)))), path, nil)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (parser *Parser) parseFileAndTypes(packageDir, path string, src interface{}) error {
+	if strings.HasSuffix(strings.ToLower(path), "_test.go") || filepath.Ext(path) != ".go" {
+		return nil
+	}
+
+	// positions are relative to FileSet
+	astFile, err := goparser.ParseFile(token.NewFileSet(), path, src, goparser.ParseComments)
+	if err != nil {
+		return fmt.Errorf("ParseFile error:%+v", err)
+	}
+
+	err = parser.Packages.CollectAstFile(packageDir, path, astFile)
+	if err != nil {
+		return err
+	}
+
+	parser.Packages.parseTypesFromFile(astFile, packageDir, make(map[*TypeSpecDef]*Schema))
+
+	return nil
 }
 
 // GetAllGoFileInfo gets all Go source files information for given searchDir.
@@ -1297,7 +1342,7 @@ func (parser *Parser) parseFile(packageDir, path string, src interface{}) error 
 		return fmt.Errorf("ParseFile error:%+v", err)
 	}
 
-	err = parser.packages.CollectAstFile(packageDir, path, astFile)
+	err = parser.Packages.CollectAstFile(packageDir, path, astFile)
 	if err != nil {
 		return err
 	}
@@ -1362,7 +1407,7 @@ func (parser *Parser) GetSwagger() *spec.Swagger {
 // addTestType just for tests.
 func (parser *Parser) addTestType(typename string) {
 	typeDef := &TypeSpecDef{}
-	parser.packages.uniqueDefinitions[typename] = typeDef
+	parser.Packages.uniqueDefinitions[typename] = typeDef
 	parser.parsedSchemas[typeDef] = &Schema{
 		PkgPath: "",
 		Name:    typename,
