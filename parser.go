@@ -776,7 +776,7 @@ func (parser *Parser) getTypeSchema(typeName string, file *ast.File, ref bool) (
 
 	typeSpecDef := parser.packages.FindTypeSpec(typeName, file, parser.ParseDependency)
 	if typeSpecDef == nil {
-		return nil, errors.Errorf("cannot find type definition: %s", typeName)
+		return nil, fmt.Errorf("cannot find type definition: %s", typeName)
 	}
 
 	schema, ok := parser.parsedSchemas[typeSpecDef]
@@ -1208,7 +1208,7 @@ func defineTypeOfExample(schemaType, arrayType, exampleValue string) (interface{
 		return result, nil
 	case OBJECT:
 		if arrayType == "" {
-			return nil, errors.Errorf("%s is unsupported type in example value `%s`", schemaType, exampleValue)
+			return nil, fmt.Errorf("%s is unsupported type in example value `%s`", schemaType, exampleValue)
 		}
 
 		values := strings.Split(exampleValue, ",")

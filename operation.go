@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/go-openapi/spec"
-	"github.com/pkg/errors"
 	"golang.org/x/tools/go/loader"
 )
 
@@ -717,7 +716,7 @@ func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File)
 		// ignore key type
 		idx := strings.Index(refType, "]")
 		if idx < 0 {
-			return nil, errors.Errorf("invalid type: %s", refType)
+			return nil, fmt.Errorf("invalid type: %s", refType)
 		}
 		refType = refType[idx+1:]
 		if refType == "interface{}" || refType == "interface {}" {
@@ -748,7 +747,7 @@ func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File)
 func (operation *Operation) parseCombinedObjectSchema(refType string, astFile *ast.File) (*spec.Schema, error) {
 	matches := combinedPattern.FindStringSubmatch(refType)
 	if len(matches) != 3 {
-		return nil, errors.Errorf("invalid type: %s", refType)
+		return nil, fmt.Errorf("invalid type: %s", refType)
 	}
 	refType = matches[1]
 	schema, err := operation.parseObjectSchema(refType, astFile)
