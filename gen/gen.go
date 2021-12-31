@@ -34,16 +34,35 @@ func New() *Gen {
 	}
 }
 
+type GenConfig struct {
+	// OutputDir represents the output directory for all the generated files
+	OutputDir string
+
+	// InstanceName is used to get distinct names for different swagger documents in the
+	// same project. The default value is "swagger".
+	InstanceName string
+
+	// GeneratedTime whether swag should generate the timestamp at the top of docs.go
+	GeneratedTime bool
+}
+
 // Config presents Gen configurations.
 type Config struct {
+	// OutputDir represents the output directory for all the generated files
+	OutputDir string
+
+	// InstanceName is used to get distinct names for different swagger documents in the
+	// same project. The default value is "swagger".
+	InstanceName string
+
+	// GeneratedTime whether swag should generate the timestamp at the top of docs.go
+	GeneratedTime bool
+
 	// SearchDir the swag would be parse,comma separated if multiple
 	SearchDir string
 
 	// excludes dirs and files in SearchDir,comma separated
 	Excludes string
-
-	// OutputDir represents the output directory for all the generated files
-	OutputDir string
 
 	// MainAPIFile the Go file path in which 'swagger general API Info' is written
 	MainAPIFile string
@@ -56,10 +75,6 @@ type Config struct {
 
 	// CodeExampleFilesDir used to find code example files, which can be used for x-codeSamples
 	CodeExampleFilesDir string
-
-	// InstanceName is used to get distinct names for different swagger documents in the
-	// same project. The default value is "swagger".
-	InstanceName string
 
 	// ParseDepth dependency parse depth
 	ParseDepth int
@@ -75,38 +90,19 @@ type Config struct {
 
 	// Strict whether swag should error or warn when it detects cases which are most likely user errors
 	Strict bool
-
-	// GeneratedTime whether swag should generate the timestamp at the top of docs.go
-	GeneratedTime bool
 }
 
-// Build builds swagger json file  for given searchDir and mainAPIFile. Returns json
-func (g *Gen) Build(config *Config) error {
+// Generate outputs a swagger spec
+func (g *Gen) Generate(swagger *spec.Swagger, config *GenConfig) error {
 	if config.InstanceName == "" {
 		config.InstanceName = swag.Name
 	}
 
-	searchDirs := strings.Split(config.SearchDir, ",")
-	for _, searchDir := range searchDirs {
-		if _, err := os.Stat(searchDir); os.IsNotExist(err) {
-			return fmt.Errorf("dir: %s does not exist", searchDir)
-		}
+	if config.OutputDir == "" {
+		config.OutputDir = "docs/"
 	}
 
 	log.Println("Generate swagger docs....")
-	p := swag.New(swag.SetMarkdownFileDirectory(config.MarkdownFilesDir),
-		swag.SetExcludedDirsAndFiles(config.Excludes),
-		swag.SetCodeExamplesDirectory(config.CodeExampleFilesDir),
-		swag.SetStrict(config.Strict))
-	p.PropNamingStrategy = config.PropNamingStrategy
-	p.ParseVendor = config.ParseVendor
-	p.ParseDependency = config.ParseDependency
-	p.ParseInternal = config.ParseInternal
-
-	if err := p.ParseAPIMultiSearchDir(searchDirs, config.MainAPIFile, config.ParseDepth); err != nil {
-		return err
-	}
-	swagger := p.GetSwagger()
 
 	b, err := g.jsonIndent(swagger)
 	if err != nil {
@@ -160,6 +156,36 @@ func (g *Gen) Build(config *Config) error {
 	return nil
 }
 
+// Build builds swagger json file  for given searchDir and mainAPIFile. Returns json
+func (g *Gen) Build(config *Config) error {
+	searchDirs := strings.Split(config.SearchDir, ",")
+	for _, searchDir := range searchDirs {
+		if _, err := os.Stat(searchDir); os.IsNotExist(err) {
+			return fmt.Errorf("dir: %s does not exist", searchDir)
+		}
+	}
+
+	log.Println("Generate swagger docs....")
+	p := swag.New(swag.SetMarkdownFileDirectory(config.MarkdownFilesDir),
+		swag.SetExcludedDirsAndFiles(config.Excludes),
+		swag.SetCodeExamplesDirectory(config.CodeExampleFilesDir),
+		swag.SetStrict(config.Strict))
+	p.PropNamingStrategy = config.PropNamingStrategy
+	p.ParseVendor = config.ParseVendor
+	p.ParseDependency = config.ParseDependency
+	p.ParseInternal = config.ParseInternal
+
+	if err := p.ParseAPIMultiSearchDir(searchDirs, config.MainAPIFile, config.ParseDepth); err != nil {
+		return err
+	}
+
+	return g.Generate(p.GetSwagger(), &GenConfig{
+		OutputDir:     config.OutputDir,
+		InstanceName:  config.InstanceName,
+		GeneratedTime: config.GeneratedTime,
+	})
+}
+
 func (g *Gen) writeFile(b []byte, file string) error {
 	f, err := os.Create(file)
 	if err != nil {
@@ -179,7 +205,7 @@ func (g *Gen) formatSource(src []byte) []byte {
 	return code
 }
 
-func (g *Gen) writeGoDoc(packageName string, output io.Writer, swagger *spec.Swagger, config *Config) error {
+func (g *Gen) writeGoDoc(packageName string, output io.Writer, swagger *spec.Swagger, config *GenConfig) error {
 	generator, err := template.New("swagger_info").Funcs(template.FuncMap{
 		"printDoc": func(v string) string {
 			// Add schemes
