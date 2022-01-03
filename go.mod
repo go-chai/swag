@@ -1,4 +1,4 @@
-module github.com/swaggo/swag
+module github.com/go-chai/swag
 
 go 1.17
 
@@ -9,6 +9,7 @@ require (
 	github.com/go-openapi/spec v0.20.4
 	github.com/otiai10/copy v1.7.0
 	github.com/stretchr/testify v1.7.0
+	github.com/swaggo/swag v1.7.8
 	github.com/urfave/cli/v2 v2.3.0
 	golang.org/x/tools v0.1.7
 )
